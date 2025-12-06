@@ -18,6 +18,7 @@ const client = new MongoClient(process.env.DB_URI, {
 // midelwers
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 app.get("/", (req, res) => {
   res.send("Hello World!");
@@ -26,12 +27,12 @@ app.get("/", (req, res) => {
 async function run() {
   try {
     const database = client.db("eTuitionBD");
-    const userCollection = database.collection("users");
+    const usersCollection = database.collection("users");
 
     // get all users
     app.get("/users", async (req, res) => {
       try {
-        const cursor = userCollection.find();
+        const cursor = usersCollection.find();
         const users = await cursor.toArray();
         res.send(users);
       } catch (error) {
@@ -42,11 +43,29 @@ async function run() {
     // add a new user
     app.post("/users", async (req, res) => {
       try {
-        const newUser = req.body;
-        const result = await userCollection.insertOne(newUser);
+        const userData = req.body;
+        userData.created_at = new Date().toISOString();
+        userData.last_loggedIn = new Date().toISOString();
+
+        const query = {
+          email: userData.email,
+        };
+
+        const alreadyExists = await usersCollection.findOne(query);
+
+        if (alreadyExists) {
+          const result = await usersCollection.updateOne(query, {
+            $set: {
+              last_loggedIn: new Date().toISOString(),
+            },
+          });
+          return res.send(result);
+        }
+
+        const result = await usersCollection.insertOne(userData);
         res.send(result);
       } catch (error) {
-        res.status(500).send({ message: "Error adding user", error });
+        res.status(500).send({ message: "Error posting users", error });
       }
     });
 
