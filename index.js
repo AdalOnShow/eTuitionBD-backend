@@ -69,6 +69,21 @@ async function run() {
       }
     });
 
+    // get role
+    app.get("/users/role", async (req, res) => {
+      try {
+        const email = req.query.email;
+        const result = await usersCollection.findOne({ email });
+        if(result?.role){
+          return res.send({ role: result?.role });
+        }else {
+          return res.send({massage: "user dos't exist"})
+        }
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching user role", error });
+      }
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
