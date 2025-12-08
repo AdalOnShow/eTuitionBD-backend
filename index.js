@@ -3,7 +3,7 @@ const express = require("express");
 const env = require("dotenv");
 env.config();
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
 
 // database connection
@@ -28,6 +28,7 @@ async function run() {
   try {
     const database = client.db("eTuitionBD");
     const usersCollection = database.collection("users");
+    const tuitionsCollection = database.collection("tuitions");
 
     // get all users
     app.get("/users", async (req, res) => {
@@ -74,13 +75,69 @@ async function run() {
       try {
         const email = req.query.email;
         const result = await usersCollection.findOne({ email });
-        if(result?.role){
+        if (result?.role) {
           return res.send({ role: result?.role });
-        }else {
-          return res.send({massage: "user dos't exist"})
+        } else {
+          return res.send({ massage: "user dos't exist" });
         }
       } catch (error) {
         res.status(500).send({ message: "Error fetching user role", error });
+      }
+    });
+
+    // add a new tuition
+    app.post("/tuition", async (req, res) => {
+      try {
+        const newTuition = req.body;
+        newTuition.created_at = new Date().toISOString();
+
+        const result = await tuitionsCollection.insertOne(newTuition);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error posting tuition", error });
+      }
+    });
+
+    // get all tuitions
+    app.get("/tuitions", async (req, res) => {
+      const email = req.query.email;
+      const query = email ? { student_email: email } : {};
+
+      try {
+        const cursor = tuitionsCollection.find(query);
+        const tuitions = await cursor.toArray();
+        res.send(tuitions);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching tuitions", error });
+      }
+    });
+
+    // get one tuition by id
+    app.get("/tuition/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      try {
+        const tuition = await tuitionsCollection.findOne(query);
+        res.send(tuition);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching tuition", error });
+      }
+    });
+
+    // update tuition by id
+    app.patch("/tuition/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updatedData = req.body;
+      updatedData.updated_at = new Date().toISOString();
+
+      try {
+        const result = await tuitionsCollection.updateOne(query, {
+          $set: updatedData,
+        });
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error updating tuition", error });
       }
     });
 
