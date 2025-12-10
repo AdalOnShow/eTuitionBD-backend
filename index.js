@@ -30,17 +30,7 @@ async function run() {
     const usersCollection = database.collection("users");
     const tuitionsCollection = database.collection("tuitions");
 
-    // get all users
-    app.get("/users", async (req, res) => {
-      try {
-        const cursor = usersCollection.find();
-        const users = await cursor.toArray();
-        res.send(users);
-      } catch (error) {
-        res.status(500).send({ message: "Error fetching users", error });
-      }
-    });
-
+    //! User APIs
     // add a new user
     app.post("/users", async (req, res) => {
       try {
@@ -70,6 +60,17 @@ async function run() {
       }
     });
 
+    // get all users
+    app.get("/users", async (req, res) => {
+      try {
+        const cursor = usersCollection.find();
+        const users = await cursor.toArray();
+        res.send(users);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching users", error });
+      }
+    });
+
     // get role
     app.get("/users/role", async (req, res) => {
       try {
@@ -85,12 +86,75 @@ async function run() {
       }
     });
 
+    // comprehensive user update
+    app.patch("/users/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const updateFields = { ...req.body };
+
+        // Add updated timestamp
+        updateFields.updated_at = new Date().toISOString();
+
+        // Handle role change logic: if role changes from tutor to non-tutor,
+        // set education and subjects to null
+        if (updateFields.role && updateFields.role !== "tutor") {
+          const currentUser = await usersCollection.findOne({ email });
+          if (currentUser && currentUser.role === "tutor") {
+            updateFields.education = null;
+            updateFields.subjects = null;
+          }
+        }
+
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: updateFields }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send(result);
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "Error updating user", error: error.message });
+      }
+    });
+
+    // delete user by id
+    app.delete("/user/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      try {
+        const result = await usersCollection.deleteOne(query);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error deleting user", error });
+      }
+    });
+
+    // update user status (active/deactive)
+    app.patch("/user-status/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const { status } = req.body;
+      try {
+        const result = await usersCollection.updateOne(query, {
+          $set: { status },
+        });
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error updating user status", error });
+      }
+    });
+
+    //! Tuition APIs
     // add a new tuition
     app.post("/tuition", async (req, res) => {
       try {
         const newTuition = req.body;
         newTuition.created_at = new Date().toISOString();
-
         const result = await tuitionsCollection.insertOne(newTuition);
         res.send(result);
       } catch (error) {
@@ -136,8 +200,29 @@ async function run() {
           $set: updatedData,
         });
         res.send(result);
+        console.log(result);
       } catch (error) {
         res.status(500).send({ message: "Error updating tuition", error });
+      }
+    });
+
+    // update tuition status by id
+    app.patch("/tuition-status/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const { status } = req.body;
+
+      console.log(status);
+
+      try {
+        const result = await tuitionsCollection.updateOne(query, {
+          $set: { status },
+        });
+        res.send(result);
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "Error updating tuition status", error });
       }
     });
 
