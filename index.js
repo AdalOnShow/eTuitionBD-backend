@@ -62,8 +62,14 @@ async function run() {
 
     // get all users
     app.get("/users", async (req, res) => {
+      const email = req.query.email
+      const query = {}
+      if(email){
+        query.email = email
+      }
+      
       try {
-        const cursor = usersCollection.find();
+        const cursor = usersCollection.find(query);
         const users = await cursor.toArray();
         res.send(users);
       } catch (error) {
@@ -90,6 +96,7 @@ async function run() {
     app.patch("/users/:email", async (req, res) => {
       try {
         const email = req.params.email;
+        console.log(req.body)
         const updateFields = { ...req.body };
 
         // Add updated timestamp
@@ -119,6 +126,7 @@ async function run() {
         res
           .status(500)
           .send({ message: "Error updating user", error: error.message });
+          console.log(error)
       }
     });
 
