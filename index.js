@@ -29,6 +29,7 @@ async function run() {
     const database = client.db("eTuitionBD");
     const usersCollection = database.collection("users");
     const tuitionsCollection = database.collection("tuitions");
+    const aplicationsCollection = database.collection("applications");
 
     //! User APIs
     // add a new user
@@ -258,6 +259,19 @@ async function run() {
         res.send(result);
       } catch (error) {
         res.status(500).send({ message: "Error deleting tuition", error });
+      }
+    });
+
+    //! Application APIs
+    // apply for a tuition
+    app.post("/apply-tuition", async (req, res) => {
+      try {
+        const applicationData = req.body;
+        applicationData.applied_at = new Date().toISOString();
+        const result = await aplicationsCollection.insertOne(applicationData);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error applying for tuition", error });
       }
     });
 
