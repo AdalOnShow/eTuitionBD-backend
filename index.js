@@ -63,9 +63,13 @@ async function run() {
     // get all users
     app.get("/users", async (req, res) => {
       const email = req.query.email
+      const role = req.query.role
       const query = {}
       if(email){
         query.email = email
+      }
+      if(role){
+        query.role = role
       }
       
       try {
@@ -76,6 +80,18 @@ async function run() {
         res.status(500).send({ message: "Error fetching users", error });
       }
     });
+
+    // get user by id
+    app.get("/user/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      try {
+        const result = await usersCollection.findOne(query);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching user", error });
+      }
+    })
 
     // get role
     app.get("/users/role", async (req, res) => {
@@ -99,16 +115,15 @@ async function run() {
         console.log(req.body)
         const updateFields = { ...req.body };
 
-        // Add updated timestamp
+
         updateFields.updated_at = new Date().toISOString();
 
-        // Handle role change logic: if role changes from tutor to non-tutor,
-        // set education and subjects to null
         if (updateFields.role && updateFields.role !== "tutor") {
           const currentUser = await usersCollection.findOne({ email });
           if (currentUser && currentUser.role === "tutor") {
             updateFields.education = null;
             updateFields.subjects = null;
+            updateFields.hourly_rate = null;
           }
         }
 
