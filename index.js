@@ -275,6 +275,26 @@ async function run() {
       }
     });
 
+    // get applications
+    app.get("/applications", async (req, res) => {
+      const tutor_email = req.query.tutor_email;
+      const student_email = req.query.student_email;
+      const query = {};
+      if (tutor_email) {
+        query.tutor_email = tutor_email;
+      }
+      if (student_email) {
+        query.student_email = student_email;
+      }
+      try {
+        const cursor = aplicationsCollection.find(query);
+        const applications = await cursor.toArray();
+        res.send(applications);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching applications", error });
+      }
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
