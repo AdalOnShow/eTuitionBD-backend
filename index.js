@@ -63,16 +63,16 @@ async function run() {
 
     // get all users
     app.get("/users", async (req, res) => {
-      const email = req.query.email
-      const role = req.query.role
-      const query = {}
-      if(email){
-        query.email = email
+      const email = req.query.email;
+      const role = req.query.role;
+      const query = {};
+      if (email) {
+        query.email = email;
       }
-      if(role){
-        query.role = role
+      if (role) {
+        query.role = role;
       }
-      
+
       try {
         const cursor = usersCollection.find(query);
         const users = await cursor.toArray();
@@ -92,7 +92,7 @@ async function run() {
       } catch (error) {
         res.status(500).send({ message: "Error fetching user", error });
       }
-    })
+    });
 
     // get role
     app.get("/users/role", async (req, res) => {
@@ -113,9 +113,8 @@ async function run() {
     app.patch("/users/:email", async (req, res) => {
       try {
         const email = req.params.email;
-        console.log(req.body)
+        console.log(req.body);
         const updateFields = { ...req.body };
-
 
         updateFields.updated_at = new Date().toISOString();
 
@@ -142,7 +141,7 @@ async function run() {
         res
           .status(500)
           .send({ message: "Error updating user", error: error.message });
-          console.log(error)
+        console.log(error);
       }
     });
 
@@ -292,6 +291,27 @@ async function run() {
         res.send(applications);
       } catch (error) {
         res.status(500).send({ message: "Error fetching applications", error });
+      }
+    });
+
+    // update application status
+    app.patch("/application-status/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const { status } = req.body;
+
+      try {
+        const result = await aplicationsCollection.updateOne(query, {
+          $set: {
+            status,
+            updated_at: new Date().toISOString(),
+          },
+        });
+        res.send(result);
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "Error updating application status", error });
       }
     });
 
