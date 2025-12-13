@@ -2,6 +2,7 @@
 const express = require("express");
 const env = require("dotenv");
 env.config();
+// const stripe = require('stripe')(process.env.STRIPE_API_KEY);
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
@@ -86,6 +87,18 @@ async function run() {
     app.get("/user/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
+      try {
+        const result = await usersCollection.findOne(query);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching user", error });
+      }
+    });
+
+    // get user by email
+    app.get("/user", async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
       try {
         const result = await usersCollection.findOne(query);
         res.send(result);
