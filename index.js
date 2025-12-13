@@ -2,7 +2,7 @@
 const express = require("express");
 const env = require("dotenv");
 env.config();
-// const stripe = require('stripe')(process.env.STRIPE_API_KEY);
+const stripe = require("stripe")(process.env.STRIPE_API_KEY);
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
@@ -109,8 +109,8 @@ async function run() {
 
     // get role
     app.get("/users/role", async (req, res) => {
+      const email = req.query.email;
       try {
-        const email = req.query.email;
         const result = await usersCollection.findOne({ email });
         if (result?.role) {
           return res.send({ role: result?.role });
@@ -118,6 +118,7 @@ async function run() {
           return res.send({ massage: "user dos't exist" });
         }
       } catch (error) {
+        console.log(error);
         res.status(500).send({ message: "Error fetching user role", error });
       }
     });
@@ -326,6 +327,37 @@ async function run() {
           .status(500)
           .send({ message: "Error updating application status", error });
       }
+    });
+
+    //! payment intent
+    app.post("/create-checkout-session", async (req, res) => {
+      const paymentInfo = req.body;
+
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: paymentInfo.tuition_title,
+                description: paymentInfo?.subject,
+              },
+              unit_amount: parseInt(paymentInfo.sallry) * 100,
+            },
+            quantity: 1,
+          },
+        ],
+        customer_email: paymentInfo.student_email,
+        mode: "payment",
+        metadata: {
+          tuition_id: paymentInfo.tuition_id,
+          tutor_email: paymentInfo.tutor_email,
+          tuition_id: paymentInfo.tuition_id,
+        },
+        success_url: `${process.env.FRONTEND_URL}/dashboard/payment-success`,
+        cancel_url: `${process.env.FRONTEND_URL}/dashboard/payment-cancel`,
+      });
+      res.send({ url: session.url });
     });
 
     await client.db("admin").command({ ping: 1 });
