@@ -31,6 +31,7 @@ async function run() {
     const usersCollection = database.collection("users");
     const tuitionsCollection = database.collection("tuitions");
     const aplicationsCollection = database.collection("applications");
+    const paymentsCollection = database.collection("payments");
 
     //! User APIs
     // add a new user
@@ -329,35 +330,81 @@ async function run() {
       }
     });
 
-    //! payment intent
+    //! payment APIs
+    // create checkout session
     app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
 
-      const session = await stripe.checkout.sessions.create({
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              product_data: {
-                name: paymentInfo.tuition_title,
-                description: paymentInfo?.subject,
+      try {
+        const session = await stripe.checkout.sessions.create({
+          line_items: [
+            {
+              price_data: {
+                currency: "usd",
+                product_data: {
+                  name: paymentInfo.tuition_title,
+                  description: paymentInfo?.subject,
+                },
+                unit_amount: parseInt(paymentInfo.sallry) * 100,
               },
-              unit_amount: parseInt(paymentInfo.sallry) * 100,
+              quantity: 1,
             },
-            quantity: 1,
+          ],
+          customer_email: paymentInfo.student_email,
+          mode: "payment",
+          metadata: {
+            tuition_id: paymentInfo.tuition_id,
+            tutor_email: paymentInfo.tutor_email,
+            tuition_id: paymentInfo.tuition_id,
           },
-        ],
-        customer_email: paymentInfo.student_email,
-        mode: "payment",
-        metadata: {
-          tuition_id: paymentInfo.tuition_id,
-          tutor_email: paymentInfo.tutor_email,
-          tuition_id: paymentInfo.tuition_id,
-        },
-        success_url: `${process.env.FRONTEND_URL}/dashboard/payment-success`,
-        cancel_url: `${process.env.FRONTEND_URL}/dashboard/payment-cancel`,
-      });
-      res.send({ url: session.url });
+          success_url: `${process.env.FRONTEND_URL}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.FRONTEND_URL}/dashboard/payment-cancel`,
+        });
+        res.send({ url: session.url });
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "Error creating checkout session", error });
+      }
+    });
+
+    // payment success
+    app.post("/payment-success", async (req, res) => {
+      const { sessionId } = req.body;
+      try {
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+        const tuitionData = await tuitionsCollection.findOne({
+          _id: new ObjectId(session.metadata.tuition_id),
+        });
+
+        const payment = await paymentsCollection.findOne({
+          transcaction_id: session.payment_intent,
+        });
+
+        if (session.payment_status === "paid" && tuitionData && !payment) {
+          const paymentData = {
+            tuition_id: session.metadata.tuition_id,
+            tuition_title: tuitionData.title,
+            tuition_subject: tuitionData.subject,
+            tutor_email: session.metadata.tutor_email,
+            student_email: session.customer_email,
+            amount_total: session.amount_total / 100,
+            transcaction_id: session.payment_intent,
+            payment_status: session.payment_status,
+            payment_method: session.payment_method_types[0],
+            paid_at: new Date().toISOString(),
+          };
+          
+          const result = await paymentsCollection.insertOne(paymentData);
+          res.send(result);
+        }
+      } catch (error) {
+        console.log(error);
+        res
+          .status(500)
+          .send({ message: "Error fetching payment success", error });
+      }
     });
 
     await client.db("admin").command({ ping: 1 });
