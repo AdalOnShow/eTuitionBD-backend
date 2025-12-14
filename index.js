@@ -321,6 +321,37 @@ async function run() {
     app.post("/apply-tuition", async (req, res) => {
       try {
         const applicationData = req.body;
+        const { tuition_id, tutor_email } = applicationData;
+
+        // Get the tuition details to check ownership
+        const tuition = await tuitionsCollection.findOne({
+          _id: new ObjectId(tuition_id)
+        });
+
+        if (!tuition) {
+          return res.status(404).send({ message: "Tuition not found" });
+        }
+
+        // Prevent self-application: Check if tutor is applying to their own tuition
+        if (tutor_email === tuition.student_email) {
+          return res.status(400).send({ 
+            message: "You cannot apply to your own tuition posting" 
+          });
+        }
+
+        // Prevent duplicate application: Check if tutor already applied
+        const existingApplication = await aplicationsCollection.findOne({
+          tuition_id: tuition_id,
+          tutor_email: tutor_email
+        });
+
+        if (existingApplication) {
+          return res.status(400).send({ 
+            message: "You have already applied to this tuition" 
+          });
+        }
+
+        // If all validations pass, create the application
         applicationData.applied_at = new Date().toISOString();
         const result = await aplicationsCollection.insertOne(applicationData);
         res.send(result);
