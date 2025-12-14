@@ -395,15 +395,61 @@ async function run() {
             payment_method: session.payment_method_types[0],
             paid_at: new Date().toISOString(),
           };
-          
+
           const result = await paymentsCollection.insertOne(paymentData);
-          res.send(result);
+          res.send(paymentData);
         }
+
+        if(payment && payment.payment_status === "paid") {
+          res.send({ message: "Payment already recorded", payment });
+        }
+
+        await tuitionsCollection.updateOne(
+          { _id: new ObjectId(session.metadata.tuition_id) },
+          { $set: { status: "assigned", updated_at: new Date().toISOString() } }
+        );
+        await aplicationsCollection.updateMany(
+          { tuition_id: session.metadata.tuition_id },
+          [
+            {
+              $set: {
+                status: {
+                  $cond: [
+                    { $eq: ["$tutor_email", session.metadata.tutor_email] },
+                    "accepted",
+                    "rejected",
+                  ],
+                },
+                updated_at: new Date().toISOString(),
+              },
+            },
+          ]
+        );
       } catch (error) {
-        console.log(error);
         res
           .status(500)
           .send({ message: "Error fetching payment success", error });
+      }
+    });
+
+    // get payments
+    app.get("/payments", async (req, res) => {
+      const tutor_email = req.query.tutor_email;
+      const student_email = req.query.student_email;
+      const query = {};
+      if (tutor_email) {
+        query.tutor_email = tutor_email;
+      }
+      if (student_email) {
+        query.student_email = student_email;
+      }
+      try {
+        const cursor = paymentsCollection.find(query);
+        const payments = await cursor.toArray();
+        res.send(payments);
+      }
+      catch (error) {
+        res.status(500).send({ message: "Error fetching payments", error });
       }
     });
 
