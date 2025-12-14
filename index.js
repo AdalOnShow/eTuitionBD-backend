@@ -200,15 +200,55 @@ async function run() {
       }
     });
 
-    // get all tuitions
+    // get all tuitions with search, filter, and pagination
     app.get("/tuitions", async (req, res) => {
       const email = req.query.email;
-      const query = email ? { student_email: email } : {};
+      const search = req.query.search;
+      const subject = req.query.subject;
+      const classLevel = req.query.class;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 6;
+      const skip = (page - 1) * limit;
+
+      const query = {};
+      
+      // Filter by student email if provided
+      if (email) {
+        query.student_email = email;
+      }
+
+      // Search functionality - search in title, subject, or class
+      if (search) {
+        query.$or = [
+          { title: { $regex: search, $options: "i" } },
+          { subject: { $regex: search, $options: "i" } },
+          { class: { $regex: search, $options: "i" } }
+        ];
+      }
+
+      // Filter by subject
+      if (subject) {
+        query.subject = { $regex: subject, $options: "i" };
+      }
+
+      // Filter by class
+      if (classLevel) {
+        query.class = { $regex: classLevel, $options: "i" };
+      }
 
       try {
-        const cursor = tuitionsCollection.find(query);
+        const totalTuitions = await tuitionsCollection.countDocuments(query);
+        const cursor = tuitionsCollection.find(query).skip(skip).limit(limit);
         const tuitions = await cursor.toArray();
-        res.send(tuitions);
+        
+        res.send({
+          tuitions,
+          totalTuitions,
+          currentPage: page,
+          totalPages: Math.ceil(totalTuitions / limit),
+          hasNextPage: page < Math.ceil(totalTuitions / limit),
+          hasPrevPage: page > 1
+        });
       } catch (error) {
         res.status(500).send({ message: "Error fetching tuitions", error });
       }
