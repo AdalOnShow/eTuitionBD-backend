@@ -512,7 +512,7 @@ async function run() {
             line_items: [
               {
                 price_data: {
-                  currency: "usd",
+                  currency: "BDT",
                   product_data: {
                     name: paymentInfo.tuition_title,
                     description: paymentInfo?.subject,
@@ -530,7 +530,7 @@ async function run() {
               tuition_id: paymentInfo.tuition_id,
             },
             success_url: `${process.env.FRONTEND_URL}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.FRONTEND_URL}/dashboard/payment-cancel`,
+            cancel_url: `${process.env.FRONTEND_URL}/dashboard/student/applied-tutors`,
           });
           res.send({ url: session.url });
         } catch (error) {
