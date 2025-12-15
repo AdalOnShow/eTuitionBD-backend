@@ -1,4 +1,3 @@
-// create a simple express server
 const express = require("express");
 const env = require("dotenv");
 env.config();
@@ -16,13 +15,42 @@ const client = new MongoClient(process.env.DB_URI, {
   },
 });
 
-// midelwers
+// middlewares
 const app = express();
 app.use(cors());
 app.use(express.json());
+const jwt = require("jsonwebtoken");
+
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+
+    req.user = decoded;
+    next();
+  });
+};
 
 app.get("/", (req, res) => {
   res.send("Hello World!");
+});
+
+// jwt generate
+app.post("/jwt", async (req, res) => {
+  const user = req.body;
+  const token = jwt.sign(user, process.env.JWT_SECRET, {
+    expiresIn: "1d",
+  });
+  res.send({ token });
 });
 
 async function run() {
@@ -30,8 +58,32 @@ async function run() {
     const database = client.db("eTuitionBD");
     const usersCollection = database.collection("users");
     const tuitionsCollection = database.collection("tuitions");
-    const aplicationsCollection = database.collection("applications");
+    const applicationsCollection = database.collection("applications");
     const paymentsCollection = database.collection("payments");
+
+    const verifyRole = (...roles) => {
+      return async (req, res, next) => {
+        try {
+          const email = req.user?.email;
+
+          if (!email) {
+            return res.status(401).json({ message: "Unauthorized" });
+          }
+
+          const user = await usersCollection.findOne({ email });
+
+          if (!user || !roles.includes(user.role)) {
+            return res.status(403).json({ message: "Forbidden" });
+          }
+
+          req.user.role = user.role;
+
+          next();
+        } catch (error) {
+          res.status(500).json({ message: "Role verification failed" });
+        }
+      };
+    };
 
     //! User APIs
     // add a new user
@@ -125,80 +177,101 @@ async function run() {
     });
 
     // comprehensive user update
-    app.patch("/users/:email", async (req, res) => {
-      try {
-        const email = req.params.email;
-        console.log(req.body);
-        const updateFields = { ...req.body };
+    app.patch(
+      "/users/:email",
+      verifyToken,
+      async (req, res) => {
+        try {
+          const email = req.params.email;
+          console.log(req.body);
+          const updateFields = { ...req.body };
 
-        updateFields.updated_at = new Date().toISOString();
+          updateFields.updated_at = new Date().toISOString();
 
-        if (updateFields.role && updateFields.role !== "tutor") {
-          const currentUser = await usersCollection.findOne({ email });
-          if (currentUser && currentUser.role === "tutor") {
-            updateFields.education = null;
-            updateFields.subjects = null;
-            updateFields.hourly_rate = null;
+          if (updateFields.role && updateFields.role !== "tutor") {
+            const currentUser = await usersCollection.findOne({ email });
+            if (currentUser && currentUser.role === "tutor") {
+              updateFields.education = null;
+              updateFields.subjects = null;
+              updateFields.hourly_rate = null;
+            }
           }
+
+          const result = await usersCollection.updateOne(
+            { email },
+            { $set: updateFields }
+          );
+
+          if (result.matchedCount === 0) {
+            return res.status(404).send({ message: "User not found" });
+          }
+
+          res.send(result);
+        } catch (error) {
+          res
+            .status(500)
+            .send({ message: "Error updating user", error: error.message });
+          console.log(error);
         }
-
-        const result = await usersCollection.updateOne(
-          { email },
-          { $set: updateFields }
-        );
-
-        if (result.matchedCount === 0) {
-          return res.status(404).send({ message: "User not found" });
-        }
-
-        res.send(result);
-      } catch (error) {
-        res
-          .status(500)
-          .send({ message: "Error updating user", error: error.message });
-        console.log(error);
       }
-    });
+    );
 
     // delete user by id
-    app.delete("/user/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      try {
-        const result = await usersCollection.deleteOne(query);
-        res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: "Error deleting user", error });
+    app.delete(
+      "/user/:id",
+      verifyToken,
+      verifyRole("admin"),
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        try {
+          const result = await usersCollection.deleteOne(query);
+          res.send(result);
+        } catch (error) {
+          res.status(500).send({ message: "Error deleting user", error });
+        }
       }
-    });
+    );
 
     // update user status (active/deactive)
-    app.patch("/user-status/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const { status } = req.body;
-      try {
-        const result = await usersCollection.updateOne(query, {
-          $set: { status },
-        });
-        res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: "Error updating user status", error });
+    app.patch(
+      "/user-status/:id",
+      verifyToken,
+      verifyRole("admin"),
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const { status } = req.body;
+        try {
+          const result = await usersCollection.updateOne(query, {
+            $set: { status },
+          });
+          res.send(result);
+        } catch (error) {
+          res
+            .status(500)
+            .send({ message: "Error updating user status", error });
+        }
       }
-    });
+    );
 
     //! Tuition APIs
     // add a new tuition
-    app.post("/tuition", async (req, res) => {
-      try {
-        const newTuition = req.body;
-        newTuition.created_at = new Date().toISOString();
-        const result = await tuitionsCollection.insertOne(newTuition);
-        res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: "Error posting tuition", error });
+    app.post(
+      "/tuition",
+      verifyToken,
+      verifyRole("student"),
+      async (req, res) => {
+        try {
+          const newTuition = req.body;
+          newTuition.created_at = new Date().toISOString();
+          const result = await tuitionsCollection.insertOne(newTuition);
+          res.send(result);
+        } catch (error) {
+          res.status(500).send({ message: "Error posting tuition", error });
+        }
       }
-    });
+    );
 
     // get all tuitions with search, filter, and pagination
     app.get("/tuitions", async (req, res) => {
@@ -211,7 +284,7 @@ async function run() {
       const skip = (page - 1) * limit;
 
       const query = {};
-      
+
       // Filter by student email if provided
       if (email) {
         query.student_email = email;
@@ -222,7 +295,7 @@ async function run() {
         query.$or = [
           { title: { $regex: search, $options: "i" } },
           { subject: { $regex: search, $options: "i" } },
-          { class: { $regex: search, $options: "i" } }
+          { class: { $regex: search, $options: "i" } },
         ];
       }
 
@@ -240,14 +313,14 @@ async function run() {
         const totalTuitions = await tuitionsCollection.countDocuments(query);
         const cursor = tuitionsCollection.find(query).skip(skip).limit(limit);
         const tuitions = await cursor.toArray();
-        
+
         res.send({
           tuitions,
           totalTuitions,
           currentPage: page,
           totalPages: Math.ceil(totalTuitions / limit),
           hasNextPage: page < Math.ceil(totalTuitions / limit),
-          hasPrevPage: page > 1
+          hasPrevPage: page > 1,
         });
       } catch (error) {
         res.status(500).send({ message: "Error fetching tuitions", error });
@@ -267,22 +340,27 @@ async function run() {
     });
 
     // update tuition by id
-    app.patch("/tuition/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const updatedData = req.body;
-      updatedData.updated_at = new Date().toISOString();
+    app.patch(
+      "/tuition/:id",
+      verifyToken,
+      verifyRole("student"),
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const updatedData = req.body;
+        updatedData.updated_at = new Date().toISOString();
 
-      try {
-        const result = await tuitionsCollection.updateOne(query, {
-          $set: updatedData,
-        });
-        res.send(result);
-        console.log(result);
-      } catch (error) {
-        res.status(500).send({ message: "Error updating tuition", error });
+        try {
+          const result = await tuitionsCollection.updateOne(query, {
+            $set: updatedData,
+          });
+          res.send(result);
+          console.log(result);
+        } catch (error) {
+          res.status(500).send({ message: "Error updating tuition", error });
+        }
       }
-    });
+    );
 
     // update tuition status by id
     app.patch("/tuition-status/:id", async (req, res) => {
@@ -305,60 +383,74 @@ async function run() {
     });
 
     // delete tuition by id
-    app.delete("/tuition/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      try {
-        const result = await tuitionsCollection.deleteOne(query);
-        res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: "Error deleting tuition", error });
+    app.delete(
+      "/tuition/:id",
+      verifyToken,
+      verifyRole("student"),
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        try {
+          const result = await tuitionsCollection.deleteOne(query);
+          res.send(result);
+        } catch (error) {
+          res.status(500).send({ message: "Error deleting tuition", error });
+        }
       }
-    });
+    );
 
     //! Application APIs
     // apply for a tuition
-    app.post("/apply-tuition", async (req, res) => {
-      try {
-        const applicationData = req.body;
-        const { tuition_id, tutor_email } = applicationData;
+    app.post(
+      "/apply-tuition",
+      verifyToken,
+      verifyRole("tutor"),
+      async (req, res) => {
+        try {
+          const applicationData = req.body;
+          const { tuition_id, tutor_email } = applicationData;
 
-        // Get the tuition details to check ownership
-        const tuition = await tuitionsCollection.findOne({
-          _id: new ObjectId(tuition_id)
-        });
-
-        if (!tuition) {
-          return res.status(404).send({ message: "Tuition not found" });
-        }
-
-        // Prevent self-application: Check if tutor is applying to their own tuition
-        if (tutor_email === tuition.student_email) {
-          return res.status(400).send({ 
-            message: "You cannot apply to your own tuition posting" 
+          // Get the tuition details to check ownership
+          const tuition = await tuitionsCollection.findOne({
+            _id: new ObjectId(tuition_id),
           });
-        }
 
-        // Prevent duplicate application: Check if tutor already applied
-        const existingApplication = await aplicationsCollection.findOne({
-          tuition_id: tuition_id,
-          tutor_email: tutor_email
-        });
+          if (!tuition) {
+            return res.status(404).send({ message: "Tuition not found" });
+          }
 
-        if (existingApplication) {
-          return res.status(400).send({ 
-            message: "You have already applied to this tuition" 
+          // Prevent self-application: Check if tutor is applying to their own tuition
+          if (tutor_email === tuition.student_email) {
+            return res.status(400).send({
+              message: "You cannot apply to your own tuition posting",
+            });
+          }
+
+          // Prevent duplicate application: Check if tutor already applied
+          const existingApplication = await applicationsCollection.findOne({
+            tuition_id: tuition_id,
+            tutor_email: tutor_email,
           });
-        }
 
-        // If all validations pass, create the application
-        applicationData.applied_at = new Date().toISOString();
-        const result = await aplicationsCollection.insertOne(applicationData);
-        res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: "Error applying for tuition", error });
+          if (existingApplication) {
+            return res.status(400).send({
+              message: "You have already applied to this tuition",
+            });
+          }
+
+          // If all validations pass, create the application
+          applicationData.applied_at = new Date().toISOString();
+          const result = await applicationsCollection.insertOne(
+            applicationData
+          );
+          res.send(result);
+        } catch (error) {
+          res
+            .status(500)
+            .send({ message: "Error applying for tuition", error });
+        }
       }
-    });
+    );
 
     // get applications
     app.get("/applications", async (req, res) => {
@@ -372,7 +464,7 @@ async function run() {
         query.student_email = student_email;
       }
       try {
-        const cursor = aplicationsCollection.find(query);
+        const cursor = applicationsCollection.find(query);
         const applications = await cursor.toArray();
         res.send(applications);
       } catch (error) {
@@ -381,127 +473,147 @@ async function run() {
     });
 
     // update application status
-    app.patch("/application-status/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const { status } = req.body;
+    app.patch(
+      "/application-status/:id",
+      verifyToken,
+      verifyRole("student"),
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const { status } = req.body;
 
-      try {
-        const result = await aplicationsCollection.updateOne(query, {
-          $set: {
-            status,
-            updated_at: new Date().toISOString(),
-          },
-        });
-        res.send(result);
-      } catch (error) {
-        res
-          .status(500)
-          .send({ message: "Error updating application status", error });
+        try {
+          const result = await applicationsCollection.updateOne(query, {
+            $set: {
+              status,
+              updated_at: new Date().toISOString(),
+            },
+          });
+          res.send(result);
+        } catch (error) {
+          res
+            .status(500)
+            .send({ message: "Error updating application status", error });
+        }
       }
-    });
+    );
 
     //! payment APIs
     // create checkout session
-    app.post("/create-checkout-session", async (req, res) => {
-      const paymentInfo = req.body;
+    app.post(
+      "/create-checkout-session",
+      verifyToken,
+      verifyRole("student"),
+      async (req, res) => {
+        const paymentInfo = req.body;
 
-      try {
-        const session = await stripe.checkout.sessions.create({
-          line_items: [
-            {
-              price_data: {
-                currency: "usd",
-                product_data: {
-                  name: paymentInfo.tuition_title,
-                  description: paymentInfo?.subject,
+        try {
+          const session = await stripe.checkout.sessions.create({
+            line_items: [
+              {
+                price_data: {
+                  currency: "usd",
+                  product_data: {
+                    name: paymentInfo.tuition_title,
+                    description: paymentInfo?.subject,
+                  },
+                  unit_amount: parseInt(paymentInfo.sallry) * 100,
                 },
-                unit_amount: parseInt(paymentInfo.sallry) * 100,
+                quantity: 1,
               },
-              quantity: 1,
+            ],
+            customer_email: paymentInfo.student_email,
+            mode: "payment",
+            metadata: {
+              tuition_id: paymentInfo.tuition_id,
+              tutor_email: paymentInfo.tutor_email,
+              tuition_id: paymentInfo.tuition_id,
             },
-          ],
-          customer_email: paymentInfo.student_email,
-          mode: "payment",
-          metadata: {
-            tuition_id: paymentInfo.tuition_id,
-            tutor_email: paymentInfo.tutor_email,
-            tuition_id: paymentInfo.tuition_id,
-          },
-          success_url: `${process.env.FRONTEND_URL}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${process.env.FRONTEND_URL}/dashboard/payment-cancel`,
-        });
-        res.send({ url: session.url });
-      } catch (error) {
-        res
-          .status(500)
-          .send({ message: "Error creating checkout session", error });
+            success_url: `${process.env.FRONTEND_URL}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.FRONTEND_URL}/dashboard/payment-cancel`,
+          });
+          res.send({ url: session.url });
+        } catch (error) {
+          res
+            .status(500)
+            .send({ message: "Error creating checkout session", error });
+        }
       }
-    });
+    );
 
     // payment success
-    app.post("/payment-success", async (req, res) => {
-      const { sessionId } = req.body;
-      try {
-        const session = await stripe.checkout.sessions.retrieve(sessionId);
+    app.post(
+      "/payment-success",
+      verifyToken,
+      verifyRole("student"),
+      async (req, res) => {
+        const { sessionId } = req.body;
+        try {
+          const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-        const tuitionData = await tuitionsCollection.findOne({
-          _id: new ObjectId(session.metadata.tuition_id),
-        });
+          const tuitionData = await tuitionsCollection.findOne({
+            _id: new ObjectId(session.metadata.tuition_id),
+          });
 
-        const payment = await paymentsCollection.findOne({
-          transcaction_id: session.payment_intent,
-        });
-
-        if (session.payment_status === "paid" && tuitionData && !payment) {
-          const paymentData = {
-            tuition_id: session.metadata.tuition_id,
-            tuition_title: tuitionData.title,
-            tuition_subject: tuitionData.subject,
-            tutor_email: session.metadata.tutor_email,
-            student_email: session.customer_email,
-            amount_total: session.amount_total / 100,
+          const payment = await paymentsCollection.findOne({
             transcaction_id: session.payment_intent,
-            payment_status: session.payment_status,
-            payment_method: session.payment_method_types[0],
-            paid_at: new Date().toISOString(),
-          };
+          });
 
-          const result = await paymentsCollection.insertOne(paymentData);
-          res.send(paymentData);
-        }
+          if (session.payment_status === "paid" && tuitionData && !payment) {
+            const paymentData = {
+              tuition_id: session.metadata.tuition_id,
+              tuition_title: tuitionData.title,
+              tuition_subject: tuitionData.subject,
+              tutor_email: session.metadata.tutor_email,
+              student_email: session.customer_email,
+              amount_total: session.amount_total / 100,
+              transcaction_id: session.payment_intent,
+              payment_status: session.payment_status,
+              payment_method: session.payment_method_types[0],
+              paid_at: new Date().toISOString(),
+            };
 
-        if(payment && payment.payment_status === "paid") {
-          res.send({ message: "Payment already recorded", payment });
-        }
+            const result = await paymentsCollection.insertOne(paymentData);
+            res.send(paymentData);
+          }
 
-        await tuitionsCollection.updateOne(
-          { _id: new ObjectId(session.metadata.tuition_id) },
-          { $set: { status: "assigned", updated_at: new Date().toISOString() } }
-        );
-        await aplicationsCollection.updateMany(
-          { tuition_id: session.metadata.tuition_id },
-          [
+          if (payment && payment.payment_status === "paid") {
+            res.send({ message: "Payment already recorded", payment });
+          }
+
+          await tuitionsCollection.updateOne(
+            { _id: new ObjectId(session.metadata.tuition_id) },
             {
               $set: {
-                status: {
-                  $cond: [
-                    { $eq: ["$tutor_email", session.metadata.tutor_email] },
-                    "accepted",
-                    "rejected",
-                  ],
-                },
+                status: "assigned",
                 updated_at: new Date().toISOString(),
               },
-            },
-          ]
-        );
-      } catch (error) {
-        res
-          .status(500)
-          .send({ message: "Error fetching payment success", error });
+            }
+          );
+          await applicationsCollection.updateMany(
+            { tuition_id: session.metadata.tuition_id },
+            [
+              {
+                $set: {
+                  status: {
+                    $cond: [
+                      { $eq: ["$tutor_email", session.metadata.tutor_email] },
+                      "accepted",
+                      "rejected",
+                    ],
+                  },
+                  updated_at: new Date().toISOString(),
+                },
+              },
+            ]
+          );
+        } catch (error) {
+          res
+            .status(500)
+            .send({ message: "Error fetching payment success", error });
+        }
       }
-    });
+    );
 
     // get payments
     app.get("/payments", async (req, res) => {
@@ -518,8 +630,7 @@ async function run() {
         const cursor = paymentsCollection.find(query);
         const payments = await cursor.toArray();
         res.send(payments);
-      }
-      catch (error) {
+      } catch (error) {
         res.status(500).send({ message: "Error fetching payments", error });
       }
     });
