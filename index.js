@@ -17,7 +17,13 @@ const client = new MongoClient(process.env.DB_URI, {
 
 // middlewares
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: [process.env.FRONTEND_URL],
+    credentials: true,
+    optionSuccessStatus: 200,
+  })
+);
 app.use(express.json());
 const jwt = require("jsonwebtoken");
 
@@ -116,7 +122,7 @@ async function run() {
     });
 
     // get all users
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyToken, async (req, res) => {
       const email = req.query.email;
       const role = req.query.role;
       const query = {};
@@ -136,6 +142,19 @@ async function run() {
       }
     });
 
+    // get all recent tutors
+    app.get("/tutors", async (req, res) => {
+      const query = { role: "tutor" };
+
+      try {
+        const cursor = usersCollection.find(query);
+        const tutors = await cursor.toArray();
+        res.send(tutors);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching tutors", error });
+      }
+    });
+
     // get user by id
     app.get("/user/:id", async (req, res) => {
       const id = req.params.id;
@@ -149,7 +168,7 @@ async function run() {
     });
 
     // get user by email
-    app.get("/user", async (req, res) => {
+    app.get("/user", verifyToken, async (req, res) => {
       const email = req.query.email;
       const query = { email: email };
       try {
@@ -177,44 +196,40 @@ async function run() {
     });
 
     // comprehensive user update
-    app.patch(
-      "/users/:email",
-      verifyToken,
-      async (req, res) => {
-        try {
-          const email = req.params.email;
-          console.log(req.body);
-          const updateFields = { ...req.body };
+    app.patch("/users/:email", verifyToken, async (req, res) => {
+      try {
+        const email = req.params.email;
+        console.log(req.body);
+        const updateFields = { ...req.body };
 
-          updateFields.updated_at = new Date().toISOString();
+        updateFields.updated_at = new Date().toISOString();
 
-          if (updateFields.role && updateFields.role !== "tutor") {
-            const currentUser = await usersCollection.findOne({ email });
-            if (currentUser && currentUser.role === "tutor") {
-              updateFields.education = null;
-              updateFields.subjects = null;
-              updateFields.hourly_rate = null;
-            }
+        if (updateFields.role && updateFields.role !== "tutor") {
+          const currentUser = await usersCollection.findOne({ email });
+          if (currentUser && currentUser.role === "tutor") {
+            updateFields.education = null;
+            updateFields.subjects = null;
+            updateFields.hourly_rate = null;
           }
-
-          const result = await usersCollection.updateOne(
-            { email },
-            { $set: updateFields }
-          );
-
-          if (result.matchedCount === 0) {
-            return res.status(404).send({ message: "User not found" });
-          }
-
-          res.send(result);
-        } catch (error) {
-          res
-            .status(500)
-            .send({ message: "Error updating user", error: error.message });
-          console.log(error);
         }
+
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: updateFields }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send(result);
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "Error updating user", error: error.message });
+        console.log(error);
       }
-    );
+    });
 
     // delete user by id
     app.delete(
@@ -233,7 +248,7 @@ async function run() {
       }
     );
 
-    // update user status (active/deactive)
+    // update user status (active/deactivate)
     app.patch(
       "/user-status/:id",
       verifyToken,
