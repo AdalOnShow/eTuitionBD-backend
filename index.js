@@ -294,6 +294,7 @@ async function run() {
       const search = req.query.search;
       const subject = req.query.subject;
       const classLevel = req.query.class;
+      const status = req.query.status;
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 6;
       const skip = (page - 1) * limit;
@@ -322,6 +323,11 @@ async function run() {
       // Filter by class
       if (classLevel) {
         query.class = { $regex: classLevel, $options: "i" };
+      }
+
+      // Filter by status
+      if (status) {
+        query.status = status;
       }
 
       try {
