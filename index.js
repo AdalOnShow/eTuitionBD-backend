@@ -295,11 +295,23 @@ async function run() {
       const subject = req.query.subject;
       const classLevel = req.query.class;
       const status = req.query.status;
+      const sort = req.query.sort;
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 6;
       const skip = (page - 1) * limit;
 
       const query = {};
+      let sortQuery = { created_at: -1 }; // Default: Newest first
+
+      if (sort === "price-asc") {
+        sortQuery = { budget: 1 };
+      } else if (sort === "price-desc") {
+        sortQuery = { budget: -1 };
+      } else if (sort === "date-asc") {
+        sortQuery = { created_at: 1 };
+      } else if (sort === "date-desc") {
+        sortQuery = { created_at: -1 };
+      }
 
       // Filter by student email if provided
       if (email) {
@@ -332,7 +344,11 @@ async function run() {
 
       try {
         const totalTuitions = await tuitionsCollection.countDocuments(query);
-        const cursor = tuitionsCollection.find(query).skip(skip).limit(limit);
+        const cursor = tuitionsCollection
+          .find(query)
+          .sort(sortQuery)
+          .skip(skip)
+          .limit(limit);
         const tuitions = await cursor.toArray();
 
         res.send({
