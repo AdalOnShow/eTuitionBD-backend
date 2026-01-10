@@ -656,6 +656,195 @@ async function run() {
       }
     });
 
+    //! Admin Analytics APIs
+    app.get(
+      "/admin-stats",
+      verifyToken,
+      verifyRole("admin"),
+      async (req, res) => {
+        try {
+          // 1. User Role Distribution (Pie Chart)
+          const userRoles = await usersCollection
+            .aggregate([
+              { $group: { _id: "$role", count: { $sum: 1 } } },
+              { $project: { name: "$_id", count: 1, _id: 0 } },
+            ])
+            .toArray();
+
+          const totalUsersCount = userRoles.reduce(
+            (acc, curr) => acc + curr.count,
+            0
+          );
+          const userRoleData = userRoles.map((role) => ({
+            name: role.name.charAt(0).toUpperCase() + role.name.slice(1) + "s",
+            value: parseFloat(((role.count / totalUsersCount) * 100).toFixed(1)),
+            count: role.count,
+          }));
+
+          // 2. Monthly Data (Growth, Revenue, Activity)
+          // We'll use a single aggregation pipeline or separate ones. Separate for clarity.
+
+          // Monthly User Growth
+          const userGrowth = await usersCollection
+            .aggregate([
+              {
+                $project: {
+                  month: {
+                    $dateToString: {
+                      format: "%b",
+                      date: { $toDate: "$created_at" },
+                    },
+                  },
+                  yearMonth: {
+                    $dateToString: {
+                      format: "%Y-%m",
+                      date: { $toDate: "$created_at" },
+                    },
+                  },
+                },
+              },
+              { $group: { _id: "$yearMonth", users: { $sum: 1 }, month: { $first: "$month" } } },
+              { $sort: { _id: 1 } },
+            ])
+            .toArray();
+
+          // Monthly Tuition Activity
+          const tuitionActivity = await tuitionsCollection
+            .aggregate([
+              {
+                $project: {
+                  month: {
+                    $dateToString: {
+                      format: "%b",
+                      date: { $toDate: "$created_at" },
+                    },
+                  },
+                  yearMonth: {
+                    $dateToString: {
+                      format: "%Y-%m",
+                      date: { $toDate: "$created_at" },
+                    },
+                  },
+                },
+              },
+              { $group: { _id: "$yearMonth", tuitions: { $sum: 1 }, month: { $first: "$month" } } },
+              { $sort: { _id: 1 } },
+            ])
+            .toArray();
+
+          // Monthly Revenue
+          const monthlyRevenue = await paymentsCollection
+            .aggregate([
+              {
+                $project: {
+                  month: {
+                    $dateToString: {
+                      format: "%b",
+                      date: { $toDate: "$paid_at" },
+                    },
+                  },
+                  yearMonth: {
+                    $dateToString: {
+                      format: "%Y-%m",
+                      date: { $toDate: "$paid_at" },
+                    },
+                  },
+                  amount: "$amount_total",
+                },
+              },
+              {
+                $group: {
+                  _id: "$yearMonth",
+                  revenue: { $sum: "$amount" },
+                  month: { $first: "$month" },
+                },
+              },
+              { $sort: { _id: 1 } },
+            ])
+            .toArray();
+
+          // 3. Key Metrics
+          const totalTuitions = await tuitionsCollection.countDocuments();
+          const totalRevenueArr = await paymentsCollection
+            .aggregate([
+              { $group: { _id: null, total: { $sum: "$amount_total" } } },
+            ])
+            .toArray();
+          const totalRevenue = totalRevenueArr[0]?.total || 0;
+
+          const assignedTuitions = await tuitionsCollection.countDocuments({
+            status: "assigned",
+          });
+          const successRate = totalTuitions
+            ? Math.round((assignedTuitions / totalTuitions) * 100)
+            : 0;
+
+          // 4. Recent Activity
+          const recentUsers = await usersCollection
+            .find()
+            .sort({ created_at: -1 })
+            .limit(3)
+            .toArray();
+          const recentTuitions = await tuitionsCollection
+            .find()
+            .sort({ created_at: -1 })
+            .limit(3)
+            .toArray();
+          const recentApplications = await applicationsCollection
+            .find()
+            .sort({ applied_at: -1 })
+            .limit(3)
+            .toArray();
+
+          const activities = [
+            ...recentUsers.map((u) => ({
+              activity: "New user registered",
+              user: u.name,
+              type: "User",
+              date: u.created_at,
+              status: u.status || "Verified",
+              badge: "badge-secondary",
+            })),
+            ...recentTuitions.map((t) => ({
+              activity: "New tuition posted",
+              user: t.student_name,
+              type: "Tuition",
+              date: t.created_at,
+              status: t.status,
+              badge: "badge-primary",
+            })),
+            ...recentApplications.map((a) => ({
+              activity: "Application submitted",
+              user: a.tutor_name,
+              type: "Application",
+              date: a.applied_at,
+              status: a.status,
+              badge: "badge-accent",
+            })),
+          ]
+            .sort((a, b) => new Date(b.date) - new Date(a.date))
+            .slice(0, 5);
+
+          res.send({
+            userRoleData,
+            userGrowth,
+            tuitionActivity,
+            monthlyRevenue,
+            stats: {
+              totalUsers: totalUsersCount,
+              totalTuitions,
+              totalRevenue,
+              successRate,
+            },
+            activities,
+          });
+        } catch (error) {
+          console.error("Admin stats error:", error);
+          res.status(500).send({ message: "Error fetching admin stats", error });
+        }
+      }
+    );
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
