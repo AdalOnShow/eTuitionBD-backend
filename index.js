@@ -125,12 +125,20 @@ async function run() {
     app.get("/users", verifyToken, async (req, res) => {
       const email = req.query.email;
       const role = req.query.role;
+      const search = req.query.search;
       const query = {};
+
       if (email) {
         query.email = email;
       }
-      if (role) {
+      if (role && role !== "all") {
         query.role = role;
+      }
+      if (search) {
+        query.$or = [
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ];
       }
 
       try {
