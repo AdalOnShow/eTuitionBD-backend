@@ -869,6 +869,24 @@ async function run() {
       }
     );
 
+    // Public stats endpoint for homepage counts
+    app.get("/stats", async (req, res) => {
+      try {
+        const totalUsers = await usersCollection.countDocuments();
+        const totalTutors = await usersCollection.countDocuments({ role: "tutor" });
+        const totalTuitions = await tuitionsCollection.countDocuments();
+        const assignedTuitions = await tuitionsCollection.countDocuments({ status: "assigned" });
+        const successRate = totalTuitions
+          ? Math.round((assignedTuitions / totalTuitions) * 100)
+          : 0;
+
+        res.send({ totalUsers, totalTutors, totalTuitions, successRate });
+      } catch (error) {
+        console.error("Stats endpoint error:", error);
+        res.status(500).send({ message: "Error fetching stats", error });
+      }
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
