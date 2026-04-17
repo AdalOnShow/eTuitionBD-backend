@@ -31,9 +31,13 @@ export class AuthService {
     });
 
     const returnPayload = {
-      statusbar: 'success',
+      status: 'success',
+      statusCode: 201,
       message: 'User registered successfully',
-      _id: result._id,
+      data: {
+        _id: result._id,
+        role: result.role,
+      },
       accessToken: token,
     };
 
