@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { RegisterUserDto } from 'src/user/dto/registerUser.dto';
-import { UserService } from 'src/user/user.service';
-import bcrypt from 'bcrypt';
-import { JwtService } from '@nestjs/jwt/dist/jwt.service';
+import { UserService } from './user/user.service';
+import { JwtService } from '@nestjs/jwt';
+import { CreateUserDto } from './user/dto/create-user.dto';
 
 @Injectable()
 export class AuthService {
@@ -11,20 +10,13 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async registerUser(registerUserDto: RegisterUserDto) {
+  async registerUser(createUserDto: CreateUserDto) {
     //? Logic for registering a user
-
-    // Hash the password before saving the user
-    const hashedPass = await bcrypt.hash(registerUserDto.password, 10);
-
-    // Create the user with the hashed password
-    const result = await this.userService.createUser({
-      ...registerUserDto,
-      password: hashedPass,
-    });
+    // Create the user (password hashing is done in user.service.ts)
+    const result = await this.userService.create(createUserDto);
 
     // Generate a JWT token for the user (implementation not shown here)
-    const payload = { sub: result._id, email: result.email, role: result.role };
+    const payload = { sub: result.id, email: result.email, role: result.role };
     const token = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_SECRET,
       expiresIn: '1h',
@@ -35,7 +27,7 @@ export class AuthService {
       statusCode: 201,
       message: 'User registered successfully',
       data: {
-        _id: result._id,
+        id: result.id,
         role: result.role,
       },
       accessToken: token,
