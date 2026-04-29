@@ -12,6 +12,7 @@ model User {
   id       String   @id @default(cuid())
   email    String   @unique
   name     String
+  username String   @unique
   password String
   role     String   @default("student")
   profile  Profile?
@@ -20,7 +21,6 @@ model User {
 model Profile {
   id        String  @id @default(cuid())
   userId    String  @unique
-  username  String? @unique
   bio       String?
   avatarUrl String?
   user      User    @relation(fields: [userId], references: [id])
