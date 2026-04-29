@@ -12,7 +12,7 @@ export class AuthController {
   }
 
   @Post('login')
-  async login(@Body() loginDto: { email: string; password: string }) {
-    return await this.authService.login(loginDto.email, loginDto.password);
+  async login(@Body() loginDto: { identifier: string; password: string }) {
+    return await this.authService.login(loginDto.identifier, loginDto.password);
   }
 }

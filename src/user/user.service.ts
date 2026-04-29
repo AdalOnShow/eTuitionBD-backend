@@ -49,7 +49,6 @@ export class UserService {
           role: createUserDto.role || 'student',
         },
       });
-      console.log('User created in database:', user);
 
       // if user creation succeeds, we can return the created user data (excluding the password) and success message
       if (!user) {
@@ -69,7 +68,6 @@ export class UserService {
         },
       };
     } catch (err) {
-      console.log('Error in user creation:', err);
       // Prisma unique constraint violation → P2002
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -110,9 +108,13 @@ export class UserService {
     }
   }
 
-  async findByEmail(email: string) {
+  async findByEmailOrUsername(identifier: string) {
     try {
-      const user = await this.prisma.user.findUnique({ where: { email } });
+      const user = await this.prisma.user.findFirst({
+        where: {
+          OR: [{ email: identifier }, { username: identifier }],
+        },
+      });
       return user;
     } catch {
       throw new InternalServerErrorException(
