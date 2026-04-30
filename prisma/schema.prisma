@@ -8,20 +8,118 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id       String   @id @default(cuid())
-  email    String   @unique
-  name     String
-  username String   @unique
-  password String
-  role     String   @default("student")
-  profile  Profile?
+enum Role {
+  STUDENT
+  TUTOR
+  ADMIN
 }
 
-model Profile {
-  id        String  @id @default(cuid())
-  userId    String  @unique
-  bio       String?
-  avatarUrl String?
-  user      User    @relation(fields: [userId], references: [id])
+enum TuitionStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id       String  @id @default(cuid())
+  email    String  @unique
+  name     String
+  username String  @unique
+  password String?
+  role     Role    @default(STUDENT)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  studentProfile StudentProfile?
+  tutorProfile   TutorProfile?
+
+  applications Application[]
+  tuitions     Tuition[]     @relation("StudentTuitions")
+  payments     Payment[]
+}
+
+model StudentProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  phone   String?
+  address String?
+
+  createdAt DateTime @default(now())
+}
+
+model TutorProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  bio        String?
+  subjects   String[]
+  experience Int?
+
+  createdAt DateTime @default(now())
+}
+
+model Tuition {
+  id          String @id @default(cuid())
+  title       String
+  description String
+  subject     String
+  budget      Int
+  location    String
+
+  studentId String
+  student   User   @relation("StudentTuitions", fields: [studentId], references: [id])
+
+  status TuitionStatus @default(OPEN)
+
+  applications Application[]
+
+  createdAt DateTime  @default(now())
+  payments  Payment[]
+}
+
+model Application {
+  id String @id @default(cuid())
+
+  tutorId String
+  tutor   User   @relation(fields: [tutorId], references: [id])
+
+  tuitionId String
+  tuition   Tuition @relation(fields: [tuitionId], references: [id])
+
+  status ApplicationStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  tuitionId String
+  tuition   Tuition @relation(fields: [tuitionId], references: [id])
+
+  amount   Int
+  status   PaymentStatus @default(PENDING)
+  stripeId String?
+
+  createdAt DateTime @default(now())
 }

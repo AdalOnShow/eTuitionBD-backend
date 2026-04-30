@@ -46,7 +46,7 @@ export class UserService {
           password: hashedPassword,
           name: createUserDto.name,
           username: username,
-          role: createUserDto.role || 'student',
+          role: createUserDto.role || 'STUDENT',
         },
       });
 
