@@ -33,13 +33,14 @@ enum PaymentStatus {
 }
 
 model User {
-  id       String  @id @default(cuid())
-  email    String  @unique
-  name     String
-  username String  @unique
-  password String?
-  role     Role    @default(STUDENT)
-  isActive Boolean @default(true)
+  id              String  @id @default(cuid())
+  email           String  @unique
+  name            String
+  username        String  @unique
+  password        String?
+  role            Role    @default(STUDENT)
+  isActive        Boolean @default(true)
+  profileComplete Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -57,8 +58,10 @@ model StudentProfile {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id])
 
-  phone   String?
-  address String?
+  phone      String
+  address    String
+  gradeLevel String
+  school     String
 
   createdAt DateTime @default(now())
 }
@@ -68,9 +71,12 @@ model TutorProfile {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id])
 
-  bio        String?
-  subjects   String[]
-  experience Int?
+  bio            String?
+  subjects       String[]
+  experience     String
+  education      String
+  hourlyRate     Int
+  certifications String?
 
   createdAt DateTime @default(now())
 }

@@ -1,23 +1,58 @@
 import {
+  Body,
   Controller,
   Get,
-  Post,
-  Body,
-  Patch,
   Param,
-  Delete,
+  Post,
+  Request,
+  UseGuards,
 } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CreateStudentProfileDto } from './dto/create-student-profile.dto';
+import { CreateTutorProfileDto } from './dto/create-tutor-profile.dto';
 import { ProfileService } from './profile.service';
-import { CreateProfileDto } from './dto/create-profile.dto';
-import { UpdateProfileDto } from './dto/update-profile.dto';
+
+interface AuthenticatedRequest extends Request {
+  user: {
+    sub: string;
+    email: string;
+    role: string;
+  };
+}
 
 @Controller('profile')
+@UseGuards(JwtAuthGuard)
 export class ProfileController {
   constructor(private readonly profileService: ProfileService) {}
 
-  @Post()
-  create(@Body() createProfileDto: CreateProfileDto) {
-    return this.profileService.create(createProfileDto);
+  @Post('student')
+  createStudentProfile(
+    @Request() req: AuthenticatedRequest,
+    @Body() createStudentProfileDto: CreateStudentProfileDto,
+  ) {
+    const userId = req.user.sub;
+    return this.profileService.createStudentProfile(
+      userId,
+      createStudentProfileDto,
+    );
+  }
+
+  @Post('tutor')
+  createTutorProfile(
+    @Request() req: AuthenticatedRequest,
+    @Body() createTutorProfileDto: CreateTutorProfileDto,
+  ) {
+    const userId = req.user.sub;
+    return this.profileService.createTutorProfile(
+      userId,
+      createTutorProfileDto,
+    );
+  }
+
+  @Get('status')
+  getProfileStatus(@Request() req: AuthenticatedRequest) {
+    const userId = req.user.sub;
+    return this.profileService.getProfileStatus(userId);
   }
 
   @Get()
@@ -27,16 +62,6 @@ export class ProfileController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.profileService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateProfileDto: UpdateProfileDto) {
-    return this.profileService.update(+id, updateProfileDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.profileService.remove(+id);
+    return this.profileService.findOne(id);
   }
 }
