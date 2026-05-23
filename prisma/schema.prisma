@@ -8,6 +8,8 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
 enum Role {
   STUDENT
   TUTOR
@@ -32,15 +34,35 @@ enum PaymentStatus {
   FAILED
 }
 
+enum GradeLevel {
+  CLASS_1
+  CLASS_2
+  CLASS_3
+  CLASS_4
+  CLASS_5
+  CLASS_6
+  CLASS_7
+  CLASS_8
+  CLASS_9
+  CLASS_10
+  CLASS_11
+  CLASS_12
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
 model User {
   id              String  @id @default(cuid())
   email           String  @unique
   name            String
   username        String  @unique
-  password        String?
+  password        String? // Nullable — Google-only users may not have a password
   role            Role    @default(STUDENT)
   isActive        Boolean @default(true)
+  isEmailVerified Boolean @default(false) // Set true after code verification or Google login
   profileComplete Boolean @default(false)
+  avatarUrl       String? // Cloudinary image URL
+  googleId        String? @unique // Google OAuth user ID — null for email/password users
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -60,10 +82,11 @@ model StudentProfile {
 
   phone      String
   address    String
-  gradeLevel String
+  gradeLevel GradeLevel
   school     String
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model TutorProfile {
@@ -75,18 +98,20 @@ model TutorProfile {
   subjects       String[]
   experience     String
   education      String
-  hourlyRate     Int
+  hourlyRate     Int      // In BDT
   certifications String?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Tuition {
-  id          String @id @default(cuid())
+  id          String     @id @default(cuid())
   title       String
   description String
   subject     String
-  budget      Int
+  gradeLevel  GradeLevel // Grade the tuition is for — separate from student's own grade
+  budget      Int        // In BDT
   location    String
 
   studentId String
@@ -95,9 +120,10 @@ model Tuition {
   status TuitionStatus @default(OPEN)
 
   applications Application[]
+  payments     Payment[]
 
-  createdAt DateTime  @default(now())
-  payments  Payment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Application {
@@ -112,6 +138,7 @@ model Application {
   status ApplicationStatus @default(PENDING)
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Payment {
@@ -123,9 +150,11 @@ model Payment {
   tuitionId String
   tuition   Tuition @relation(fields: [tuitionId], references: [id])
 
-  amount   Int
-  status   PaymentStatus @default(PENDING)
-  stripeId String?
+  amount  Int           // In BDT
+  status  PaymentStatus @default(PENDING)
+  tranId  String?       // SSLCommerz tran_id
+  valId   String?       // SSLCommerz val_id
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
