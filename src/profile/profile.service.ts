@@ -3,22 +3,70 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { GradeLevel } from '../../generated/prisma/enums';
 import { PrismaService } from '../prisma.service';
 import { CreateStudentProfileDto } from './dto/create-student-profile.dto';
 import { CreateTutorProfileDto } from './dto/create-tutor-profile.dto';
 
 @Injectable()
 export class ProfileService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  private generateTokens(user: {
+    id: string;
+    email: string;
+    role: string;
+    name: string;
+  }) {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+    };
+
+    const accessToken = this.jwtService.sign(payload, {
+      secret: process.env.JWT_SECRET,
+      expiresIn: '1h',
+    });
+
+    const refreshToken = this.jwtService.sign(payload, {
+      secret: process.env.JWT_REFRESH_SECRET,
+      expiresIn: '7d',
+    });
+
+    return { accessToken, refreshToken };
+  }
+
+  private mapGradeLevel(gradeLevel: string): GradeLevel {
+    const gradeMap: Record<string, GradeLevel> = {
+      'Class 1': GradeLevel.CLASS_1,
+      'Class 2': GradeLevel.CLASS_2,
+      'Class 3': GradeLevel.CLASS_3,
+      'Class 4': GradeLevel.CLASS_4,
+      'Class 5': GradeLevel.CLASS_5,
+      'Class 6': GradeLevel.CLASS_6,
+      'Class 7': GradeLevel.CLASS_7,
+      'Class 8': GradeLevel.CLASS_8,
+      'Class 9': GradeLevel.CLASS_9,
+      'Class 10': GradeLevel.CLASS_10,
+      'Class 11': GradeLevel.CLASS_11,
+      'Class 12': GradeLevel.CLASS_12,
+    };
+
+    return gradeMap[gradeLevel];
+  }
 
   async createStudentProfile(
     userId: string,
     createStudentProfileDto: CreateStudentProfileDto,
   ) {
     try {
-      // Check if user exists and is a student
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
       });
@@ -27,13 +75,6 @@ export class ProfileService {
         throw new NotFoundException('User not found');
       }
 
-      if (user.role !== 'STUDENT') {
-        throw new UnauthorizedException(
-          'Only students can create student profiles',
-        );
-      }
-
-      // Check if profile already exists
       const existingProfile = await this.prisma.studentProfile.findUnique({
         where: { userId },
       });
@@ -42,22 +83,22 @@ export class ProfileService {
         throw new ConflictException('Student profile already exists');
       }
 
-      // Create student profile
       const profile = await this.prisma.studentProfile.create({
         data: {
           userId,
           phone: createStudentProfileDto.phone,
           address: createStudentProfileDto.address,
-          gradeLevel: createStudentProfileDto.gradeLevel,
+          gradeLevel: this.mapGradeLevel(createStudentProfileDto.gradeLevel),
           school: createStudentProfileDto.school,
         },
       });
 
-      // Update user profileComplete status
-      await this.prisma.user.update({
+      const updatedUser = await this.prisma.user.update({
         where: { id: userId },
-        data: { profileComplete: true },
+        data: { profileComplete: true, role: 'STUDENT' },
       });
+
+      const { accessToken, refreshToken } = this.generateTokens(updatedUser);
 
       return {
         success: true,
@@ -69,12 +110,13 @@ export class ProfileService {
           gradeLevel: profile.gradeLevel,
           school: profile.school,
         },
+        accessToken,
+        refreshToken,
       };
     } catch (error: any) {
       if (
         error instanceof NotFoundException ||
-        error instanceof ConflictException ||
-        error instanceof UnauthorizedException
+        error instanceof ConflictException
       ) {
         throw error;
       }
@@ -87,7 +129,6 @@ export class ProfileService {
     createTutorProfileDto: CreateTutorProfileDto,
   ) {
     try {
-      // Check if user exists and is a tutor
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
       });
@@ -96,13 +137,6 @@ export class ProfileService {
         throw new NotFoundException('User not found');
       }
 
-      if (user.role !== 'TUTOR') {
-        throw new UnauthorizedException(
-          'Only tutors can create tutor profiles',
-        );
-      }
-
-      // Check if profile already exists
       const existingProfile = await this.prisma.tutorProfile.findUnique({
         where: { userId },
       });
@@ -111,7 +145,6 @@ export class ProfileService {
         throw new ConflictException('Tutor profile already exists');
       }
 
-      // Create tutor profile
       const profile = await this.prisma.tutorProfile.create({
         data: {
           userId,
@@ -124,11 +157,12 @@ export class ProfileService {
         },
       });
 
-      // Update user profileComplete status
-      await this.prisma.user.update({
+      const updatedUser = await this.prisma.user.update({
         where: { id: userId },
-        data: { profileComplete: true },
+        data: { profileComplete: true, role: 'TUTOR' },
       });
+
+      const { accessToken, refreshToken } = this.generateTokens(updatedUser);
 
       return {
         success: true,
@@ -142,12 +176,13 @@ export class ProfileService {
           hourlyRate: profile.hourlyRate,
           certifications: profile.certifications,
         },
+        accessToken,
+        refreshToken,
       };
     } catch (error) {
       if (
         error instanceof NotFoundException ||
-        error instanceof ConflictException ||
-        error instanceof UnauthorizedException
+        error instanceof ConflictException
       ) {
         throw error;
       }

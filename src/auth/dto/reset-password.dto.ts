@@ -2,14 +2,19 @@ import {
   IsEmail,
   IsNotEmpty,
   IsString,
+  Length,
   Matches,
   MinLength,
 } from 'class-validator';
 
-export class CreateUserDto {
+export class ResetPasswordDto {
   @IsEmail()
   @IsNotEmpty()
   email!: string;
+
+  @IsString()
+  @Length(6, 6)
+  code!: string;
 
   @IsNotEmpty()
   @IsString()
@@ -25,8 +30,4 @@ export class CreateUserDto {
     message: 'Password must contain at least one special character',
   })
   password!: string;
-
-  @IsNotEmpty()
-  @IsString()
-  name!: string;
 }

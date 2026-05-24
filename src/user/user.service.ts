@@ -46,7 +46,6 @@ export class UserService {
           password: hashedPassword,
           name: createUserDto.name,
           username: username,
-          role: createUserDto.role || 'STUDENT',
         },
       });
 
@@ -123,6 +122,18 @@ export class UserService {
     }
   }
 
+  async findByEmail(email: string) {
+    try {
+      return await this.prisma.user.findUnique({
+        where: { email: email.toLowerCase().trim() },
+      });
+    } catch {
+      throw new InternalServerErrorException(
+        'Failed to fetch the user. Please try again.',
+      );
+    }
+  }
+
   async findOne(id: string) {
     try {
       const user = await this.prisma.user.findUnique({ where: { id } });
@@ -163,6 +174,33 @@ export class UserService {
       }
       throw new InternalServerErrorException(
         'Failed to update the user. Please try again.',
+      );
+    }
+  }
+
+  async markEmailVerified(id: string) {
+    try {
+      return await this.prisma.user.update({
+        where: { id },
+        data: { isEmailVerified: true },
+      });
+    } catch {
+      throw new InternalServerErrorException(
+        'Failed to verify email. Please try again.',
+      );
+    }
+  }
+
+  async updatePassword(id: string, password: string) {
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      return await this.prisma.user.update({
+        where: { id },
+        data: { password: hashedPassword },
+      });
+    } catch {
+      throw new InternalServerErrorException(
+        'Failed to update password. Please try again.',
       );
     }
   }
