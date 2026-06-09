@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { GradeLevel } from '../../generated/prisma/enums';
 import { PrismaService } from '../prisma.service';
@@ -15,6 +16,7 @@ export class ProfileService {
   constructor(
     private prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   private generateTokens(user: {
@@ -31,12 +33,12 @@ export class ProfileService {
     };
 
     const accessToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET,
+      secret: this.configService.getOrThrow<string>('JWT_SECRET'),
       expiresIn: '1h',
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET,
+      secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       expiresIn: '7d',
     });
 
@@ -91,11 +93,24 @@ export class ProfileService {
           gradeLevel: this.mapGradeLevel(createStudentProfileDto.gradeLevel),
           school: createStudentProfileDto.school,
         },
+        select: {
+          id: true,
+          phone: true,
+          address: true,
+          gradeLevel: true,
+          school: true,
+        },
       });
 
       const updatedUser = await this.prisma.user.update({
         where: { id: userId },
         data: { profileComplete: true, role: 'STUDENT' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+        },
       });
 
       const { accessToken, refreshToken } = this.generateTokens(updatedUser);
@@ -155,11 +170,26 @@ export class ProfileService {
           hourlyRate: createTutorProfileDto.hourlyRate,
           certifications: createTutorProfileDto.certifications,
         },
+        select: {
+          id: true,
+          bio: true,
+          subjects: true,
+          experience: true,
+          education: true,
+          hourlyRate: true,
+          certifications: true,
+        },
       });
 
       const updatedUser = await this.prisma.user.update({
         where: { id: userId },
         data: { profileComplete: true, role: 'TUTOR' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+        },
       });
 
       const { accessToken, refreshToken } = this.generateTokens(updatedUser);
@@ -238,24 +268,62 @@ export class ProfileService {
         id: true,
         email: true,
         name: true,
+        username: true,
         role: true,
         profileComplete: true,
+        isActive: true,
+        isEmailVerified: true,
+        avatarUrl: true,
+        googleId: true,
       },
     });
   }
 
-  findOne(id: string) {
-    return this.prisma.user.findUnique({
+  async findOne(id: string) {
+    const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
         email: true,
         name: true,
+        username: true,
         role: true,
         profileComplete: true,
-        studentProfile: true,
-        tutorProfile: true,
+        isActive: true,
+        isEmailVerified: true,
+        avatarUrl: true,
+        googleId: true,
+        studentProfile: {
+          select: {
+            id: true,
+            phone: true,
+            address: true,
+            gradeLevel: true,
+            school: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+        tutorProfile: {
+          select: {
+            id: true,
+            bio: true,
+            subjects: true,
+            experience: true,
+            education: true,
+            hourlyRate: true,
+            certifications: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
       },
     });
+
+    if (!user) {
+      throw new NotFoundException(`User with id "${id}" not found.`);
+    }
+
+    return user;
   }
 }

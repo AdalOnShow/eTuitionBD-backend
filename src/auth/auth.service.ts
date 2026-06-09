@@ -4,6 +4,7 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { EmailService } from 'src/email/email.service';
@@ -14,14 +15,17 @@ import { UserService } from 'src/user/user.service';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private readonly isDev = process.env.NODE_ENV !== 'production';
+  private readonly isDev: boolean;
 
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
     private readonly emailService: EmailService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.isDev = this.configService.get('NODE_ENV') !== 'production';
+  }
 
   private generateSixDigitCode(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -34,12 +38,12 @@ export class AuthService {
     name: string | null;
   }) {
     const accessToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET,
+      secret: this.configService.getOrThrow<string>('JWT_SECRET'),
       expiresIn: '1h',
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET,
+      secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       expiresIn: '7d',
     });
 

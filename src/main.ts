@@ -11,7 +11,17 @@ async function bootstrap() {
       : ['log', 'error', 'warn'],
   });
 
-  app.useGlobalPipes(new ValidationPipe());
+  app.enableShutdownHooks();
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    }),
+  );
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
@@ -20,9 +30,6 @@ async function bootstrap() {
     const logger = new Logger('Bootstrap');
     logger.log(`🚀 Server running on http://localhost:${port}`);
     logger.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-    logger.debug(
-      `📧 Resend from: ${process.env.RESEND_FROM_EMAIL || 'NOT SET'}`,
-    );
     logger.debug(
       `🔗 Redis URL: ${process.env.UPSTASH_REDIS_REST_URL ? 'configured' : 'NOT SET'}`,
     );

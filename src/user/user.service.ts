@@ -14,6 +14,32 @@ import { UpdateUserDto } from './dto/update-user.dto';
 export class UserService {
   constructor(private prisma: PrismaService) {}
 
+  private readonly publicUserSelect = {
+    id: true,
+    email: true,
+    name: true,
+    username: true,
+    role: true,
+    isActive: true,
+    isEmailVerified: true,
+    profileComplete: true,
+    avatarUrl: true,
+    googleId: true,
+    createdAt: true,
+    updatedAt: true,
+  } as const;
+
+  private readonly authUserSelect = {
+    id: true,
+    email: true,
+    name: true,
+    username: true,
+    role: true,
+    password: true,
+    isActive: true,
+    isEmailVerified: true,
+  } as const;
+
   private async generateUniqueUsername(email: string): Promise<string> {
     const emailPrefix = email.split('@')[0];
     let username = '';
@@ -37,34 +63,23 @@ export class UserService {
 
   async create(createUserDto: CreateUserDto) {
     try {
+      const normalizedEmail = createUserDto.email.toLowerCase().trim();
       const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-      const username = await this.generateUniqueUsername(createUserDto.email);
+      const username = await this.generateUniqueUsername(normalizedEmail);
 
       const user = await this.prisma.user.create({
         data: {
-          email: createUserDto.email,
+          email: normalizedEmail,
           password: hashedPassword,
-          name: createUserDto.name,
+          name: createUserDto.name.trim(),
           username: username,
         },
+        select: this.publicUserSelect,
       });
-
-      // if user creation succeeds, we can return the created user data (excluding the password) and success message
-      if (!user) {
-        throw new InternalServerErrorException(
-          'Failed to create the user. Please try again.',
-        );
-      }
 
       return {
         message: 'User created successfully',
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          username: user.username,
-          role: user.role,
-        },
+        user,
       };
     } catch (err) {
       // Prisma unique constraint violation → P2002
@@ -93,12 +108,7 @@ export class UserService {
   async findAll() {
     try {
       return await this.prisma.user.findMany({
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-        },
+        select: this.publicUserSelect,
       });
     } catch {
       throw new InternalServerErrorException(
@@ -113,6 +123,7 @@ export class UserService {
         where: {
           OR: [{ email: identifier }, { username: identifier }],
         },
+        select: this.authUserSelect,
       });
       return user;
     } catch {
@@ -126,6 +137,7 @@ export class UserService {
     try {
       return await this.prisma.user.findUnique({
         where: { email: email.toLowerCase().trim() },
+        select: this.authUserSelect,
       });
     } catch {
       throw new InternalServerErrorException(
@@ -136,7 +148,10 @@ export class UserService {
 
   async findOne(id: string) {
     try {
-      const user = await this.prisma.user.findUnique({ where: { id } });
+      const user = await this.prisma.user.findUnique({
+        where: { id },
+        select: this.publicUserSelect,
+      });
       if (!user) {
         throw new NotFoundException(`User with id "${id}" not found.`);
       }
@@ -153,9 +168,26 @@ export class UserService {
     try {
       // Ensure the user exists first
       await this.findOne(id);
+      const data: Record<string, unknown> = {
+        ...updateUserDto,
+      };
+
+      if (typeof updateUserDto.email === 'string') {
+        data.email = updateUserDto.email.toLowerCase().trim();
+      }
+
+      if (typeof updateUserDto.name === 'string') {
+        data.name = updateUserDto.name.trim();
+      }
+
+      if (typeof updateUserDto.password === 'string') {
+        data.password = await bcrypt.hash(updateUserDto.password, 10);
+      }
+
       return await this.prisma.user.update({
         where: { id },
-        data: updateUserDto,
+        data,
+        select: this.publicUserSelect,
       });
     } catch (err) {
       if (
@@ -183,6 +215,7 @@ export class UserService {
       return await this.prisma.user.update({
         where: { id },
         data: { isEmailVerified: true },
+        select: this.publicUserSelect,
       });
     } catch {
       throw new InternalServerErrorException(
@@ -197,6 +230,7 @@ export class UserService {
       return await this.prisma.user.update({
         where: { id },
         data: { password: hashedPassword },
+        select: this.publicUserSelect,
       });
     } catch {
       throw new InternalServerErrorException(
@@ -209,7 +243,7 @@ export class UserService {
     try {
       // Ensure the user exists first
       await this.findOne(id);
-      return await this.prisma.user.delete({ where: { id } });
+      await this.prisma.user.delete({ where: { id } });
     } catch (err) {
       if (err instanceof NotFoundException) throw err;
       throw new InternalServerErrorException(

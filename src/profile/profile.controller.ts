@@ -8,6 +8,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 import { CreateStudentProfileDto } from './dto/create-student-profile.dto';
 import { CreateTutorProfileDto } from './dto/create-tutor-profile.dto';
 import { ProfileService } from './profile.service';
@@ -21,7 +23,7 @@ interface AuthenticatedRequest extends Request {
 }
 
 @Controller('profile')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ProfileController {
   constructor(private readonly profileService: ProfileService) {}
 
@@ -56,11 +58,13 @@ export class ProfileController {
   }
 
   @Get()
+  @Roles('ADMIN')
   findAll() {
     return this.profileService.findAll();
   }
 
   @Get(':id')
+  @Roles('ADMIN')
   findOne(@Param('id') id: string) {
     return this.profileService.findOne(id);
   }
