@@ -97,15 +97,16 @@ export class AuthService {
     }
 
     const redisKey = `email_verify:${userId}`;
-    const storedCode = await this.redisService.get(redisKey);
+    const storedCodeRaw = await this.redisService.get(redisKey);
 
-    if (!storedCode) {
+    if (!storedCodeRaw) {
       if (this.isDev) this.logger.warn(`⏰ OTP expired for userId=${userId}`);
       throw new BadRequestException(
         'Verification code has expired. Please request a new one.',
       );
     }
 
+    const storedCode = String(storedCodeRaw);
     if (storedCode !== code) {
       if (this.isDev) this.logger.warn(`❌ Invalid OTP for userId=${userId}`);
       throw new BadRequestException('Invalid verification code.');
@@ -284,9 +285,9 @@ export class AuthService {
     }
 
     const redisKey = `password_reset:${normalizedEmail}`;
-    const storedCode = await this.redisService.get(redisKey);
+    const storedCodeRaw = await this.redisService.get(redisKey);
 
-    if (!storedCode) {
+    if (!storedCodeRaw) {
       if (this.isDev)
         this.logger.warn(`⏰ Reset code expired: ${normalizedEmail}`);
       throw new BadRequestException(
@@ -294,6 +295,7 @@ export class AuthService {
       );
     }
 
+    const storedCode = String(storedCodeRaw);
     if (storedCode !== code) {
       if (this.isDev)
         this.logger.warn(`❌ Invalid reset code: ${normalizedEmail}`);
